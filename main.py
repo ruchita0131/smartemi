@@ -90,6 +90,66 @@ def get_summary(user_id: int, db: Session = Depends(get_db)):
     total_emi = sum(l.emi for l in loans)
     income = income_row.amount if income_row else 0.0
 
+    class IncomeRequest(BaseModel):
+    amount: float
+
+class ExpenseRequest(BaseModel):
+    category: str
+    amount: float
+
+class LoanRequest(BaseModel):
+    loan_type: str
+    principal: float
+    interest_rate: float
+    tenure_months: int
+    emi: float
+
+@app.post("/api/users/{user_id}/income")
+def update_income(user_id: int, data: IncomeRequest, db: Session = Depends(get_db)):
+    inc = db.query(models.Expense).filter_by(user_id=user_id, category='income').first()
+    if inc:
+        inc.amount = data.amount
+    else:
+        inc = models.Expense(user_id=user_id, category='income', amount=data.amount)
+        db.add(inc)
+    db.commit()
+    return {"status": "ok"}
+
+@app.post("/api/users/{user_id}/expenses")
+def add_expense(user_id: int, data: ExpenseRequest, db: Session = Depends(get_db)):
+    exp = models.Expense(user_id=user_id, category=data.category, amount=data.amount)
+    db.add(exp)
+    db.commit()
+    return {"status": "ok", "id": exp.id}
+
+@app.delete("/api/users/{user_id}/expenses/{expense_id}")
+def delete_expense(user_id: int, expense_id: int, db: Session = Depends(get_db)):
+    exp = db.query(models.Expense).filter_by(id=expense_id, user_id=user_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Expense not found")
+    db.delete(exp)
+    db.commit()
+    return {"status": "ok"}
+
+@app.post("/api/users/{user_id}/loans")
+def add_loan(user_id: int, data: LoanRequest, db: Session = Depends(get_db)):
+    loan = models.Loan(
+        user_id=user_id, loan_type=data.loan_type, principal=data.principal,
+        interest_rate=data.interest_rate, tenure_months=data.tenure_months, emi=data.emi
+    )
+    db.add(loan)
+    db.commit()
+    return {"status": "ok", "id": loan.id}
+
+@app.delete("/api/users/{user_id}/loans/{loan_id}")
+def delete_loan(user_id: int, loan_id: int, db: Session = Depends(get_db)):
+    loan = db.query(models.Loan).filter_by(id=loan_id, user_id=user_id).first()
+    if not loan:
+        raise HTTPException(status_code=404, detail="Loan not found")
+    db.delete(loan)
+    db.commit()
+    return {"status": "ok"}
+    
     return {
         "monthly_income": income,
         "total_expenses": total_expenses,

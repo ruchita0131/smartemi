@@ -6,6 +6,6 @@ python-dotenv
 anthropic
 httpx
 python-jose[cryptography]
-passlib[bcrypt]
+bcrypt
 gunicorn
 pytest

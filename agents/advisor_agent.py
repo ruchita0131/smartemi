@@ -1,19 +1,21 @@
 import os
-import anthropic
+import google.generativeai as genai
 
 def run_advisor_agent(profile: dict, analysis: dict, strategy: dict, forecast: dict) -> str:
-    """Calls Claude API with full financial context to generate personalized advice."""
-    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    """Calls Gemini API with full financial context to generate personalized advice."""
+    
+    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+    model = genai.GenerativeModel("gemini-1.5-flash")
 
     loans_text = "\n".join([
         f"  - {l['loan_type'].title()} Loan: ₹{l['principal']:,.0f} @ {l['interest_rate']}% | EMI: ₹{l['emi']:,.0f}"
         for l in profile["loans"]
-    ])
+    ]) or "  - No loans found"
 
     forecast_text = "\n".join([
         f"  - {p['loan_type'].title()} Loan closes {p['closure_date']} (₹{p['total_interest_remaining']:,.0f} interest remaining)"
         for p in forecast.get("projections", [])
-    ])
+    ]) or "  - No projections available"
 
     prompt = f"""You are SmartEMI Advisor, an expert Indian personal finance AI.
 Analyze this user's complete financial situation and give specific, actionable advice.
@@ -46,10 +48,5 @@ Provide:
 
 Keep response under 250 words. Use simple language."""
 
-    message = client.messages.create(
-        model="claude-haiku-4-5",
-        max_tokens=512,
-        messages=[{"role": "user", "content": prompt}]
-    )
-
-    return message.content[0].text
+    response = model.generate_content(prompt)
+    return response.text

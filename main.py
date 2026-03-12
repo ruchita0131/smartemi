@@ -199,3 +199,8 @@ def delete_loan(user_id: int, loan_id: int, db: Session = Depends(get_db)):
     db.delete(loan)
     db.commit()
     return {"status": "ok"}
+
+    @app.get("/debug/users")
+def list_users(db: Session = Depends(get_db)):
+    users = db.query(models.User).all()
+    return [{"id": u.id, "name": u.name, "email": u.email} for u in users]

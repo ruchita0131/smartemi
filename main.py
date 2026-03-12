@@ -204,3 +204,47 @@ def delete_loan(user_id: int, loan_id: int, db: Session = Depends(get_db)):
 def list_users(db: Session = Depends(get_db)):
     users = db.query(models.User).all()
     return [{"id": u.id, "name": u.name, "email": u.email} for u in users]
+
+
+from agents.data_agent import run_data_agent
+from agents.analysis_agent import run_analysis_agent
+from agents.optimizer_agent import run_optimizer_agent
+from agents.forecast_agent import run_forecast_agent
+from agents.advisor_agent import run_advisor_agent
+
+@app.get("/api/users/{user_id}/analyze")
+def analyze(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter_by(id=user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Get raw summary
+    income_row = db.query(models.Expense).filter_by(user_id=user_id, category='income').first()
+    expenses = db.query(models.Expense).filter(
+        models.Expense.user_id == user_id,
+        models.Expense.category != 'income'
+    ).all()
+    loans = db.query(models.Loan).filter_by(user_id=user_id).all()
+
+    summary = {
+        "monthly_income": income_row.amount if income_row else 0,
+        "loans": [{"loan_type": l.loan_type, "principal": l.principal,
+                   "interest_rate": l.interest_rate, "tenure_months": l.tenure_months,
+                   "emi": l.emi} for l in loans],
+        "expenses": [{"category": e.category, "amount": e.amount} for e in expenses]
+    }
+
+    # Run the 5 agents in sequence
+    profile  = run_data_agent(summary)
+    analysis = run_analysis_agent(profile)
+    strategy = run_optimizer_agent(profile)
+    forecast = run_forecast_agent(profile)
+    advice   = run_advisor_agent(profile, analysis, strategy, forecast)
+
+    return {
+        "profile":  profile,
+        "analysis": analysis,
+        "strategy": strategy,
+        "forecast": forecast,
+        "advice":   advice
+    }

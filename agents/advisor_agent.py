@@ -34,10 +34,10 @@ LOAN PROJECTIONS:
 {forecast_text}
 
 OPTIMIZER RECOMMENDATION:
-- Best strategy: {strategy['recommended_method','N/A'].title()} method
+- Best strategy: {strategy.get('recommended_method', 'N/A').title()} method
 - First loan to attack: {strategy.get('priority_loan', 'N/A').title()} Loan
-- Extra monthly payment suggested: ₹{strategy['extra_monthly_payment']:,.0f}
-- Interest saved vs other strategy: ₹{strategy['interest_saved_by_choosing_better']:,.0f}
+- Extra monthly payment suggested: ₹{strategy.get('extra_monthly_payment', 0):,.0f}
+- Interest saved vs other strategy: ₹{strategy.get('interest_saved_by_choosing_better', 0):,.0f}
 
 Provide:
 1. A clear 2-line assessment of their financial health

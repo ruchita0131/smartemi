@@ -251,9 +251,6 @@ def analyze(user_id: int, db: Session = Depends(get_db)):
         "advice":   advice
     }
 
-import os
 
-@app.get("/debug/env")
-def check_env():
-    key = os.getenv("ANTHROPIC_API_KEY", "NOT SET")
-    return {"key_set": key != "NOT SET", "key_preview": key[:15] + "..." if key != "NOT SET" else "NOT SET"}
+
+

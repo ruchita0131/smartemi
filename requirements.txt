@@ -10,4 +10,4 @@ bcrypt
 gunicorn
 pytest
 python-dateutil
-google-generativeai
+google-genai

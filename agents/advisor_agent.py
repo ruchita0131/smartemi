@@ -1,11 +1,10 @@
 import os
-import google.generativeai as genai
+from google import genai
 
 def run_advisor_agent(profile: dict, analysis: dict, strategy: dict, forecast: dict) -> str:
     """Calls Gemini API with full financial context to generate personalized advice."""
-    
-    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-    model = genai.GenerativeModel("gemini-1.5-flash")
+
+    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
     loans_text = "\n".join([
         f"  - {l['loan_type'].title()} Loan: ₹{l['principal']:,.0f} @ {l['interest_rate']}% | EMI: ₹{l['emi']:,.0f}"
@@ -48,5 +47,8 @@ Provide:
 
 Keep response under 250 words. Use simple language."""
 
-    response = model.generate_content(prompt)
+    response = client.models.generate_content(
+        model="models/gemini-2.5-flash",
+        contents=prompt
+    )
     return response.text

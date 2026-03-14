@@ -386,7 +386,7 @@ If asked something unrelated to finance, politely redirect."""
     full_prompt = system_context + "\n\n" + conversation
 
     response = client.models.generate_content(
-        model="models/gemini-2.0-flash-lite",
+        model="models/gemini-2.5-flash",
         contents=full_prompt
     )
 

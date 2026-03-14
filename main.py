@@ -249,6 +249,72 @@ def analyze(user_id: int, db: Session = Depends(get_db)):
         "strategy": strategy,
         "forecast": forecast,
         "advice":   advice
+
+    }
+
+
+
+class SimulateRequest(BaseModel):
+    loan_id: int
+    extra_monthly_payment: float
+
+@app.post("/api/users/{user_id}/simulate")
+def simulate(user_id: int, data: SimulateRequest, db: Session = Depends(get_db)):
+    loan = db.query(models.Loan).filter_by(id=data.loan_id, user_id=user_id).first()
+    if not loan:
+        raise HTTPException(status_code=404, detail="Loan not found")
+
+    def calculate_payoff(principal, annual_rate, emi, extra=0):
+        monthly_rate = annual_rate / 100 / 12
+        balance = principal
+        months = 0
+        total_interest = 0
+
+        while balance > 0 and months < 360:
+            interest = balance * monthly_rate
+            total_interest += interest
+            payment = emi + extra
+            principal_paid = payment - interest
+            if principal_paid <= 0:
+                break
+            balance -= principal_paid
+            if balance < 0:
+                balance = 0
+            months += 1
+
+        return months, round(total_interest, 2)
+
+    # Without extra payment
+    original_months, original_interest = calculate_payoff(
+        loan.principal, loan.interest_rate, loan.emi, 0
+    )
+
+    # With extra payment
+    new_months, new_interest = calculate_payoff(
+        loan.principal, loan.interest_rate, loan.emi, data.extra_monthly_payment
+    )
+
+    months_saved = original_months - new_months
+    interest_saved = original_interest - new_interest
+
+    from datetime import datetime
+    from dateutil.relativedelta import relativedelta
+    today = datetime.today()
+
+    return {
+        "loan_type": loan.loan_type,
+        "principal": loan.principal,
+        "interest_rate": loan.interest_rate,
+        "emi": loan.emi,
+        "extra_payment": data.extra_monthly_payment,
+        "original_months": original_months,
+        "new_months": new_months,
+        "months_saved": months_saved,
+        "original_interest": original_interest,
+        "new_interest": new_interest,
+        "interest_saved": round(interest_saved, 2),
+        "original_closure": (today + relativedelta(months=original_months)).strftime("%B %Y"),
+        "new_closure": (today + relativedelta(months=new_months)).strftime("%B %Y"),
     }
 
 

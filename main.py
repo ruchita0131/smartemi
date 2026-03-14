@@ -208,11 +208,9 @@ def list_users(db: Session = Depends(get_db)):
     return [{"id": u.id, "name": u.name, "email": u.email} for u in users]
 
 
-from agents.data_agent import run_data_agent
-from agents.analysis_agent import run_analysis_agent
-from agents.optimizer_agent import run_optimizer_agent
-from agents.forecast_agent import run_forecast_agent
-from agents.advisor_agent import run_advisor_agent
+
+
+from agents.graph import run_financial_graph
 
 @app.get("/api/users/{user_id}/analyze")
 def analyze(user_id: int, db: Session = Depends(get_db)):
@@ -220,36 +218,45 @@ def analyze(user_id: int, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Get raw summary
-    income_row = db.query(models.Expense).filter_by(user_id=user_id, category='income').first()
+    # Build raw summary
+    income_row = db.query(models.Expense).filter_by(
+        user_id=user_id, category='income'
+    ).first()
     expenses = db.query(models.Expense).filter(
         models.Expense.user_id == user_id,
         models.Expense.category != 'income'
     ).all()
     loans = db.query(models.Loan).filter_by(user_id=user_id).all()
 
-    summary = {
+    raw_summary = {
         "monthly_income": income_row.amount if income_row else 0,
-        "loans": [{"loan_type": l.loan_type, "principal": l.principal,
-                   "interest_rate": l.interest_rate, "tenure_months": l.tenure_months,
-                   "emi": l.emi} for l in loans],
-        "expenses": [{"category": e.category, "amount": e.amount} for e in expenses]
+        "loans": [
+            {
+                "loan_type": l.loan_type,
+                "principal": l.principal,
+                "interest_rate": l.interest_rate,
+                "tenure_months": l.tenure_months,
+                "emi": l.emi
+            } for l in loans
+        ],
+        "expenses": [
+            {"category": e.category, "amount": e.amount}
+            for e in expenses
+        ]
     }
 
-    # Run the 5 agents in sequence
-    profile  = run_data_agent(summary)
-    analysis = run_analysis_agent(profile)
-    strategy = run_optimizer_agent(profile)
-    forecast = run_forecast_agent(profile)
-    advice   = run_advisor_agent(profile, analysis, strategy, forecast)
+    # Run LangGraph pipeline
+    result = run_financial_graph(raw_summary)
+
+    if result.get("error"):
+        raise HTTPException(status_code=400, detail=result["error"])
 
     return {
-        "profile":  profile,
-        "analysis": analysis,
-        "strategy": strategy,
-        "forecast": forecast,
-        "advice":   advice
-
+        "profile":  result["profile"],
+        "analysis": result["analysis"],
+        "strategy": result["strategy"],
+        "forecast": result["forecast"],
+        "advice":   result["advice"]
     }
 
 
@@ -317,6 +324,73 @@ def simulate(user_id: int, data: SimulateRequest, db: Session = Depends(get_db))
         "new_closure": (today + relativedelta(months=new_months)).strftime("%B %Y"),
     }
 
+
+class ChatRequest(BaseModel):
+    message: str
+    history: list = []
+
+@app.post("/api/users/{user_id}/chat")
+def chat(user_id: int, data: ChatRequest, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter_by(id=user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Get user's financial context
+    income_row = db.query(models.Expense).filter_by(
+        user_id=user_id, category='income'
+    ).first()
+    expenses = db.query(models.Expense).filter(
+        models.Expense.user_id == user_id,
+        models.Expense.category != 'income'
+    ).all()
+    loans = db.query(models.Loan).filter_by(user_id=user_id).all()
+
+    income = income_row.amount if income_row else 0
+    total_emi = sum(l.emi for l in loans)
+    total_expenses = sum(e.amount for e in expenses)
+
+    loans_text = "\n".join([
+        f"- {l.loan_type.title()} Loan: ₹{l.principal:,.0f} @ {l.interest_rate}% | EMI: ₹{l.emi:,.0f}"
+        for l in loans
+    ]) or "No loans"
+
+    # Build context-aware system prompt
+    system_context = f"""You are SmartEMI, a friendly AI financial advisor.
+You have full access to this user's financial data:
+
+Monthly Income: ₹{income:,.0f}
+Total EMI: ₹{total_emi:,.0f}
+Total Expenses: ₹{total_expenses:,.0f}
+Disposable Income: ₹{income - total_emi - total_expenses:,.0f}
+
+Loans:
+{loans_text}
+
+Answer questions about their finances clearly and specifically.
+Use their actual numbers. Be concise — max 3 sentences per response.
+If asked something unrelated to finance, politely redirect."""
+
+    # Build conversation
+    from google import genai as google_genai
+    import os
+
+    client = google_genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+    # Format history + new message
+    conversation = ""
+    for msg in data.history[-6:]:  # last 6 messages for context
+        role = "User" if msg["role"] == "user" else "SmartEMI"
+        conversation += f"{role}: {msg['content']}\n"
+    conversation += f"User: {data.message}\nSmartEMI:"
+
+    full_prompt = system_context + "\n\n" + conversation
+
+    response = client.models.generate_content(
+        model="models/gemini-2.0-flash-lite",
+        contents=full_prompt
+    )
+
+    return {"reply": response.text.strip()}
 
 
 

@@ -11,3 +11,4 @@ gunicorn
 pytest
 python-dateutil
 google-genai
+langgraph

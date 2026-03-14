@@ -393,4 +393,11 @@ If asked something unrelated to finance, politely redirect."""
     return {"reply": response.text.strip()}
 
 
+@app.get("/api/users/{user_id}/profile")
+def get_profile(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter_by(id=user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"id": user.id, "name": user.name, "email": user.email}
+
 

@@ -12,3 +12,4 @@ pytest
 python-dateutil
 google-genai
 langgraph
+psycopg2-binary
